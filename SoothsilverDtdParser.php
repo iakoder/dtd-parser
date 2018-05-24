@@ -7,23 +7,20 @@
 /**
  * @namespace Soothsilver
  * Contains all classes belonging to the standalone DTD parser. This is a supernamespace based on the author's nickname.
- */
-/**
+ *
  * @namespace Soothsilver::DtdParser
  * Contains all classes belonging to the standalone DTD parser.
  */
-/**
- * @namespace Soothsilver::DtdParser::Internal
- * Contains classes used internally by the Soothsilver DTD Parser. These do not form part of its public API.
- */
-
 namespace Soothsilver\DtdParser {
-
     /**
      * Represents all information extracted from a Document Type Declaration file, possibly combined with an internal subset.
      */
     class DTD
     {
+        const OPT_SOURCE_IS_FILE = 2;
+        const OPT_ALLOW_LOCAL_FILES = 4;
+        const OPT_ALLOW_REMOTE_FILES = 8;
+
         /**
          * List of element types sorted in declaration order. If an ATTLIST declaration preceded the ELEMENT declaration,
          * the position is determined by the ATTLIST declaration.  This is an associative array.
@@ -63,7 +60,6 @@ namespace Soothsilver\DtdParser {
          * @var ProcessingInstruction[]
          */
         public $processingInstructions = [];
-
         /**
          * Returns a boolean representing the well-formedness and validity of the DTD.
          * @return bool True, if no errors were triggered during parsing; false otherwise.
@@ -73,6 +69,14 @@ namespace Soothsilver\DtdParser {
             return count($this->errors) === 0;
         }
 
+        /**
+         * @var int $options   bitmask of OPT_ constants
+         */
+        private $options = 0;
+        /**
+         * @var string $dirName  the directory from which the dtd was loaded (if it was loaded from a file)
+         */
+        private $dtdDir = '';
         /**
          * Notice: Parsing external entities is a security problem. User should be given an option to enable or disable it.
          * Since the DTD Parser is now used only in the XMLCheck project where it is not desirable to load external entities,
@@ -93,7 +97,6 @@ namespace Soothsilver\DtdParser {
          * the XML specification.
          */
         private $xmlRegexes;
-
         /**
          * Puts a new warning into the warnings list.
          * @param string $message The warning message to show to the user.
@@ -103,7 +106,6 @@ namespace Soothsilver\DtdParser {
         {
             $this->warnings[] = new Error($message . " (line " . $line . ")");
         }
-
         /**
          * Puts a new error into the errors list. Calling this function means the DTD document contains a violation of
          * the XML specification.
@@ -114,7 +116,6 @@ namespace Soothsilver\DtdParser {
         {
             $this->errors[] = new Error($message . " (line " . $line . ")");
         }
-
         /**
          * Checks if the supplied string matches the XML production NAME.
          * @param string $name The string to check for being a NAME.
@@ -133,7 +134,6 @@ namespace Soothsilver\DtdParser {
         {
             return preg_match("#" . $this->xmlRegexes->NmToken . "#u", $nmToken) === 1;
         }
-
         /**
          * Reads characters from the specified position until it encounters a non-whitespace character, then returns
          * the position of this character. If no such character is found, then it returns false.
@@ -166,7 +166,6 @@ namespace Soothsilver\DtdParser {
             }
             return false;
         }
-
         /**
          * The string given is split by whitespace into individual words, with the following exceptions:
          * 1. A quote (") open a quoted string which is put into a single token even if it includes whitespaces or apostrophes. This token is ended by the next quote (").
@@ -322,7 +321,6 @@ namespace Soothsilver\DtdParser {
             }
             return $tokens;
         }
-
         /**
          * Checks whether the specified haystack begins with the specified needle.
          * @param string $haystack The string whose beginning we search. (TODO grammar)
@@ -334,7 +332,6 @@ namespace Soothsilver\DtdParser {
             $length = strlen($needle);
             return (substr($haystack, 0, $length) === $needle);
         }
-
         /**
          * Evaluates all parameter entity references in the specified text according to the specified mode as per the
          * XML specification. Returns the expanded text. Parameter entities are expanded recursively.
@@ -345,7 +342,7 @@ namespace Soothsilver\DtdParser {
         private function evaluatePEReferencesIn($text, $peStyle)
         {
             $matches = [];
-            while (preg_match('#(("[^"]*")|(\'[^\']*\')|[^\'"])*%([^;]*);#', $text, $matches, PREG_OFFSET_CAPTURE) === 1)
+            while (preg_match('#(("[^"]*")|(\'[^\']*\')|[^\'"])*%([^; ]*);#', $text, $matches, PREG_OFFSET_CAPTURE) === 1)
             {
                 $entityBeginsAt = $matches[4][1] - 1;
                 $entityEndsBefore = $matches[4][1] + strlen($matches[4][0])+1;
@@ -377,7 +374,6 @@ namespace Soothsilver\DtdParser {
             }
             return $text;
         }
-
         /**
          * Parses a parameter entity reference that is not part of any other declaration (i.e. it lies freely in the DTD space.
          * @param string $referenceName Name of the referenced parameter entity.
@@ -402,7 +398,6 @@ namespace Soothsilver\DtdParser {
                 $this->addFatalError("The parameter entity '" . $referenceName . "' is not yet declared.", $this->line);
             }
         }
-
         /**
          * Checks whether the three tokens in $tokens starting $index exist, represent matching quotation marks and then
          * returns the middle token.
@@ -432,7 +427,6 @@ namespace Soothsilver\DtdParser {
             }
             return $middle;
         }
-
         /**
          * Checks whether the three tokens in $tokens starting $index exist, represent matching quotation marks and then
          * returns the middle token.
@@ -447,7 +441,6 @@ namespace Soothsilver\DtdParser {
             $identifier = $this->parseQuotedString($tokens, $index);
             return $identifier;
         }
-
         /**
          * Parses an element declaration and adds it to the element list. If it fails, it adds an error to the error list.
          * @param string $declaration The !ELEMENT declaration string, starting just after the !ELEMENT text.
@@ -507,7 +500,6 @@ namespace Soothsilver\DtdParser {
                 $this->elements[$name] = new Element($name, $contentspec, $isMixed);
             }
         }
-
         /**
          * Parses an ATTLIST declaration and adds the information to the element list. If it fails, an error will be
          * added to the error list.
@@ -626,7 +618,7 @@ namespace Soothsilver\DtdParser {
                             if ($tokenId + 3 < count($tokens))
                             {
                                 if  (($tokens[$tokenId+1] === "'" && $tokens[$tokenId+3] === "'") ||
-                                    ($tokens[$tokenId+1] === '"' && $tokens[$tokenId+3] === '"'))
+                                     ($tokens[$tokenId+1] === '"' && $tokens[$tokenId+3] === '"'))
                                 {
                                     // Parameter entities should not be expanded here.
                                     $attributeDefaultValue = $tokens[$tokenId+2];
@@ -690,13 +682,11 @@ namespace Soothsilver\DtdParser {
                 }
                 $tokenId++;
             }
-
             if ($attributeName !== false)
             {
                 $this->addFatalError("An attribute definition inside the ATTLIST was not completed.", $this->line);
             }
         }
-
         /**
          * Parses a notation declaration and adds it to the notations list. If it fails, an error is added to the error list.
          * @param string $markupDeclaration The !NOTATION declaration string, starting just after the !NOTATION text.
@@ -710,7 +700,6 @@ namespace Soothsilver\DtdParser {
                 $this->addFatalError("Notation declaration could not be tokenized: " . $tokenizationError, $this->line);
                 return;
             }
-
             if (count($tokens) === 5 || count($tokens) === 8)
             {
                 $error = false;
@@ -754,7 +743,6 @@ namespace Soothsilver\DtdParser {
                     $this->addFatalError("External ID's in '" . $markupDeclaration . "' are not properly quoted.", $this->line);
                     return;
                 }
-
                 $notation = new Notation($name, $systemId, $publicId);
                 if (array_key_exists($name, $this->notations))
                 {
@@ -768,7 +756,6 @@ namespace Soothsilver\DtdParser {
                 $this->addFatalError("'" . $markupDeclaration . "' is not a well-formed NOTATION declaration.", $this->line);
             }
         }
-
         /**
          * Parses an !ENTITY declaration and adds it to the general entities or parameter entities list. If it fails,
          * it adds an error to the error list. If it's a parameter entity, its replacement text is generated at this point
@@ -847,14 +834,12 @@ namespace Soothsilver\DtdParser {
                         $this->addFatalError("Parsing the public identifier of '" . $markupDeclaration . "' failed.", $this->line);
                         return;
                     }
-
                     $tokenId += 3;
                     $systemIdentifier = $this->parseExternalIdentifier($tokens, $tokenId);
                     if ($publicIdentifier === false) {
                         $this->addFatalError("Parsing the system identifier of '" . $markupDeclaration . "' failed.", $this->line);
                         return;
                     }
-
                     $tokenId += 3;
                 }
                 $replacementText = "";
@@ -898,13 +883,31 @@ namespace Soothsilver\DtdParser {
                 }
                 if ($this->shouldLoadExternalEntities)
                 {
+                    if ($systemIdentifier !== '')
+                    {
+                        if (false !== strpos($systemIdentifier, '://'))
+                        {
+                            if (!($this->options & self::OPT_ALLOW_REMOTE_FILES)) {
+                                $this->addWarning("This DTD parser is not configured to parse additional remote external entities.",
+                                                  $this->line);
+                            }
+                        }
+                        else
+                        {
+                            if (!($this->options & self::OPT_ALLOW_LOCAL_FILES))
+                            {
+                                $this->addWarning("This DTD parser is not configured to parse additional local external entities.",
+                                                  $this->line);
+                            }
+                            $systemIdentifier = $this->dtdDir . '/' . $systemIdentifier;
+                        }
+                    }
                     if (file_exists($systemIdentifier))
                     {
                         $externalContent = file_get_contents($systemIdentifier);
                         if ($externalContent !== false)
                         {
-                            // This should probably, at user option, be permitted.
-                            $this->addWarning("This DTD parser is not programmed to parse additional external entities.", $this->line);
+                            $replacementText = $externalContent;
                         }
                         else
                         {
@@ -915,6 +918,10 @@ namespace Soothsilver\DtdParser {
                     {
                         $this->addWarning("An external parameter entity is declared but its system identifier does not point to a file.", $this->line);
                     }
+                }
+                else
+                {
+                    $this->addWarning("This DTD parser is not configured to parse additional external entities.", $this->line);
                 }
             }
             else if ($tokens[$tokenId] === "'" || $tokens[$tokenId] === '"')
@@ -962,7 +969,6 @@ namespace Soothsilver\DtdParser {
                 }
             }
         }
-
         /**
          * Parses the specified string as a DTD markup declaration.
          * @param string $markupDeclaration A DTD markup declaration to parse.
@@ -982,7 +988,6 @@ namespace Soothsilver\DtdParser {
                 $this->addFatalError("This declaration type does not exist (only ELEMENT, ATTLIST, NOTATION and ENTITY are possible).", $this->line);
             }
         }
-
         /**
          * Parses a processing instruction and adds it to the list of processing instruction. Adds an error if the parsing fails.
          * @param string $processingInstruction A processing instruction text, starting just after the left angle bracket and the question mark.
@@ -1002,7 +1007,6 @@ namespace Soothsilver\DtdParser {
             }
             $this->processingInstructions = new ProcessingInstruction($split[0], $split[1]);
         }
-
         /**
          * Parses the given text as the contents of a DTD file.
          * @param string $text The text of the DTD file.
@@ -1014,19 +1018,16 @@ namespace Soothsilver\DtdParser {
             $this->currentOffset = 0;
             $includeSectionsOpened = 0;
             $ignoreSectionsOpened = 0;
-
             // 1. Normalize end-of-lines as per unicode spec
             $text = str_replace("\r\n", "\n", $text); // Quotes necessary, with apostrophes, it would not work.
             $text = str_replace("\r", "\n", $text);   // Quotes necessary, with apostrophes, it would not work.
             // str_replace only counts a \n as a newline if it is within
             // quotes.
-
             // 2. Remove comments
             // Comments should probably be saved as well. Someone might want to access them. In future versions of the
             // parser, this functionality should be added. Plus, multiline comments mess with line numbers in errors.
             $text = preg_replace('/<!--(([^-])|(-[^-]))*-->/', '', $text);
             $length = strlen($text);
-
             // 3. Go through the text, searching for
             //  a) %ref; Parameter entity reference.
             //  b) <!ELEMENT Name TextNoGt>
@@ -1197,33 +1198,48 @@ namespace Soothsilver\DtdParser {
                 $this->addFatalError("A conditional section was not closed by the end of the DTD.", $this->line);
             }
         }
-
         /**
          * Creates a new DTD object from the specified DTD text and internal subset. These texts are parsed immediately.
          * @param string $text The contents of a DTD file.
          * @param string $internalSubset The contents of an internal subset.
+         * @param int    $options bitmask of OPT_ constants
          */
-        private function __construct($text, $internalSubset)
+        private function __construct($text, $internalSubset, $options)
         {
+            $this->options = $options;
+            if ($options & self::OPT_SOURCE_IS_FILE) {
+                $fileName = $text;
+                $text = file_get_contents($fileName);
+                if ($text === false) {
+                    throw new \InvalidArgumentException("Unable to read $fileName");
+                }
+                $this->dtdDir = dirname($fileName);
+            } else {
+                if ($options & self::OPT_ALLOW_LOCAL_FILES && !($options & self::OPT_SOURCE_IS_FILE)) {
+                    throw new \InvalidArgumentException("dtd must be parsed from a file if external files are allowed.");
+                }
+            }
+            if ($options & self::OPT_ALLOW_LOCAL_FILES || $options & self::OPT_ALLOW_REMOTE_FILES) {
+                $this->shouldLoadExternalEntities = true;
+            }
             $this->xmlRegexes = new Internal\XmlRegexes();
             $this->parseGlobalSpace($internalSubset, true); // Per XML specification, section 2.8, "If both the external and internal subsets are used, the internal subset must be considered to occur before the external subset."
             $this->parseGlobalSpace($text, false);
         }
-
         /**
          * Parse the text given as though it were part of a .dtd file and return a \Soothsilver\DtdParser\DTD instance, even if
          * parsing fails.
          * @param string $text UTF-8 text to parse
          * @param string $internalSubset optionally, parse this XML internal subset in addition to the main DTD text given as the first parameter
+         * @param int    $options bitmask of OPT_ constants
          * @return DTD Object representing the parsed DTD document.
          */
-        public static function parseText($text, $internalSubset = "")
+        public static function parseText($text, $internalSubset = "", $options=0)
         {
-            $dtd = new DTD($text, $internalSubset);
+            $dtd = new DTD($text, $internalSubset, $options);
             return $dtd;
         }
     }
-
     /**
      * Represents an XML notation declaration
      * See also: http://www.w3.org/TR/REC-xml/#Notations
@@ -1242,7 +1258,6 @@ namespace Soothsilver\DtdParser {
          * @var string System ID (mandatory)
          */
         public $systemID = "";
-
         /**
          * Creates a new Notation.
          * @param string $name The notation name.
@@ -1256,7 +1271,6 @@ namespace Soothsilver\DtdParser {
             $this->publicID = $publicID;
         }
     }
-
     /**
      * Represents an attribute definition of a single attribute.
      */
@@ -1349,7 +1363,6 @@ namespace Soothsilver\DtdParser {
          * @var string
          */
         public $defaultValue;
-
         /**
          * Initializes a new instance of the Attribute class that represents the definition of a single attribute.
          * @param string $name Name of the attribute.
@@ -1367,7 +1380,6 @@ namespace Soothsilver\DtdParser {
             $this->defaultValue = $defaultValue;
         }
     }
-
     /**
      * Represents a processing instruction.
      */
@@ -1381,7 +1393,6 @@ namespace Soothsilver\DtdParser {
          * @var string $data Data passed to the target of the processing instruction.
          */
         public $data;
-
         /**
          * Creates a new processing instruction.
          * @param string $target The target of the instruction.
@@ -1393,7 +1404,6 @@ namespace Soothsilver\DtdParser {
             $this->data = $data;
         }
     }
-
     /**
      * Represents the definition of an element type. This includes attributes permitted for this element.
      */
@@ -1412,7 +1422,6 @@ namespace Soothsilver\DtdParser {
          * This is a boolean rather than a string.
          */
         const CONTENT_SPECIFICATION_NOT_GIVEN = false;
-
         /**
          * A value that indicates whether the element has mixed content.
          * @note {
@@ -1421,7 +1430,6 @@ namespace Soothsilver\DtdParser {
          * @var boolean
          */
         public $mixed = false;
-
         /**
          * Name of the element. Formally, this is called the element type.
          * @var string
@@ -1437,7 +1445,6 @@ namespace Soothsilver\DtdParser {
          * @var Attribute[]
          */
         public $attributes = array();
-
         /**
          * Initializes a new instance of the Element class.
          * @param string $type Name of the element. Formally, this is called the element type.
@@ -1450,7 +1457,6 @@ namespace Soothsilver\DtdParser {
             $this->type = $type;
             $this->contentSpecification = $contentModel;
         }
-
         /**
          * Returns a value that indicates whether the element has mixed content.
          * @note {
@@ -1462,7 +1468,6 @@ namespace Soothsilver\DtdParser {
         {
             return $this->mixed;
         }
-
         /**
          * Returns a value that indicates whether the element may contain only text (that means, its content specification is (#PCDATA) or (#PCDATA)*.
          * @return bool
@@ -1472,7 +1477,6 @@ namespace Soothsilver\DtdParser {
             return $this->contentSpecification === "(#PCDATA)" || $this->contentSpecification === "(#PCDATA)*";
         }
     }
-
     /**
      * Represents the declaration of a general entity.
      */
@@ -1513,7 +1517,6 @@ namespace Soothsilver\DtdParser {
          * @var string|false
          */
         public $publicId = false;
-
         /**
          * Initializes a new instance of the GeneralEntity class. For internal use only.
          * @param string $name Name of the entity.
@@ -1533,7 +1536,6 @@ namespace Soothsilver\DtdParser {
             $this->publicId = $publicId;
         }
     }
-
     /**
      * Represents a parameter entity declaration.
      */
@@ -1564,7 +1566,6 @@ namespace Soothsilver\DtdParser {
          * @var string|false
          */
         public $publicId = false;
-
         /**
          * Initializes a new instance of the ParamaterEntity class. For internal use only.
          * @param string $name Name of the parameter entity.
@@ -1582,7 +1583,6 @@ namespace Soothsilver\DtdParser {
             $this->publicId = $publicId;
         }
     }
-
     /**
      * Represents an error or a warning produced during the parsing of a DTD file.
      */
@@ -1593,7 +1593,6 @@ namespace Soothsilver\DtdParser {
          * @var string
          */
         private $message;
-
         /**
          * Gets the error message indicating where and how the XML specification was violated.
          * @return string Error message indicating where and how the XML specification was violated.
@@ -1602,7 +1601,6 @@ namespace Soothsilver\DtdParser {
         {
             return $this->message;
         }
-
         /**
          * Constructs a new instance of the Error class. For internal use only.
          * @param string $message The error message including line number.
@@ -1614,8 +1612,11 @@ namespace Soothsilver\DtdParser {
     }
 }
 
+/**
+ * @namespace Soothsilver::DtdParser::Internal
+ * Contains classes used internally by the Soothsilver DTD Parser. These do not form part of its public API.
+ */
 namespace Soothsilver\DtdParser\Internal {
-
     /**
      * Contains regular expressions for various productions in the XML specification
      */
@@ -1636,7 +1637,6 @@ namespace Soothsilver\DtdParser\Internal {
          * @var string The NMTOKEN production.
          */
         public $NmToken;
-
         /**
          * Initializes members with productions from the specification.
          */
@@ -1648,7 +1648,6 @@ namespace Soothsilver\DtdParser\Internal {
             $this->NmToken = "{$this->NameChar}+";
         }
     }
-
     /**
      * Represents the parser state during the parsing of an ATTLIST declaration
      */
@@ -1678,7 +1677,6 @@ namespace Soothsilver\DtdParser\Internal {
          */
         const InsideEnumeration_NeedSeparator = 5;
     }
-
     /**
      * Represents the state of the parser that determines what should be done about parameter entities found.
      */
@@ -1703,6 +1701,3 @@ namespace Soothsilver\DtdParser\Internal {
         const InEntityDeclaration = 2;
     }
 }
-/**
- * @}
- */
