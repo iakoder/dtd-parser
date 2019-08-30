@@ -332,6 +332,7 @@ namespace Soothsilver\DtdParser {
             $length = strlen($needle);
             return (substr($haystack, 0, $length) === $needle);
         }
+        private static $originalEntity = Element::CONTENT_SPECIFICATION_NOT_GIVEN;
         /**
          * Evaluates all parameter entity references in the specified text according to the specified mode as per the
          * XML specification. Returns the expanded text. Parameter entities are expanded recursively.
@@ -341,6 +342,7 @@ namespace Soothsilver\DtdParser {
          */
         private function evaluatePEReferencesIn($text, $peStyle)
         {
+            self::$originalEntity = Element::CONTENT_SPECIFICATION_NOT_GIVEN;
             $matches = [];
             while (preg_match('#(("[^"]*")|(\'[^\']*\')|[^\'"])*%([^; ]*);#', $text, $matches, PREG_OFFSET_CAPTURE) === 1)
             {
@@ -349,6 +351,9 @@ namespace Soothsilver\DtdParser {
                 $entityName = $matches[4][0];
                 if (array_key_exists($entityName, $this->parameterEntities))
                 {
+                    if ( self::$originalEntity === Element::CONTENT_SPECIFICATION_NOT_GIVEN ) {
+                        self::$originalEntity = $entityName;
+                    }
                     $replacementText = $this->parameterEntities[$entityName]->replacementText;
                     switch($peStyle)
                     {
@@ -487,6 +492,7 @@ namespace Soothsilver\DtdParser {
                 if ($this->elements[$name]->contentSpecification === Element::CONTENT_SPECIFICATION_NOT_GIVEN)
                 {
                     $this->elements[$name]->contentSpecification = $contentspec;
+                    $this->elements[$name]->contentSpecificationEntity = self::$originalEntity;
                     $this->elements[$name]->mixed = $isMixed;
                 }
                 else
@@ -498,6 +504,7 @@ namespace Soothsilver\DtdParser {
             else
             {
                 $this->elements[$name] = new Element($name, $contentspec, $isMixed);
+                $this->elements[$name]->contentSpecificationEntity = self::$originalEntity;
             }
         }
         /**
@@ -1440,6 +1447,10 @@ namespace Soothsilver\DtdParser {
          * @var string
          */
         public $contentSpecification = Element::CONTENT_SPECIFICATION_NOT_GIVEN;
+        /**
+         * @var string|false $contentSpecificationEntity   name of the original entity if present
+         */
+        public $contentSpecificationEntity = Element::CONTENT_SPECIFICATION_NOT_GIVEN;
         /**
          * An array of all permitted attributes of this element.
          * @var Attribute[]
